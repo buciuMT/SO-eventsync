@@ -507,6 +507,11 @@ public:
     ErrorOr<FlatPtr> sys$archctl(int option, FlatPtr arg1);
     ErrorOr<FlatPtr> sys$unshare_create(Userspace<Syscall::SC_unshare_create_params const*>);
     ErrorOr<FlatPtr> sys$unshare_attach(Userspace<Syscall::SC_unshare_attach_params const*>);
+    //add event syscalls
+    ErrorOr<FlatPtr> sys$eventopen(Userspace<Syscall::SC_eventopen_params const*>);
+    ErrorOr<FlatPtr> sys$eventclose(Userspace<Syscall::SC_eventclose_params const*>);
+    ErrorOr<FlatPtr> sys$eventwait(Userspace<Syscall::SC_eventwait_params const*>);
+    ErrorOr<FlatPtr> sys$eventsignal(Userspace<Syscall::SC_eventsignal_params const*>);
 
     enum SockOrPeerName {
         SockName,

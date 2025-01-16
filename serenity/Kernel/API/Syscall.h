@@ -202,7 +202,11 @@ enum class NeedsBigProcessLock {
     S(waitid, NeedsBigProcessLock::Yes)                    \
     S(write, NeedsBigProcessLock::Yes)                     \
     S(pwritev, NeedsBigProcessLock::Yes)                   \
-    S(yield, NeedsBigProcessLock::No)
+    S(yield, NeedsBigProcessLock::No)                      \
+    S(eventopen, NeedsBigProcessLock::No)                  \
+    S(eventclose, NeedsBigProcessLock::No)                 \
+    S(eventwait, NeedsBigProcessLock::No)                  \
+    S(eventsignal, NeedsBigProcessLock::No)                \
 
 namespace Syscall {
 
@@ -234,6 +238,30 @@ struct StringListArgument {
     StringArgument* strings {};
     size_t length { 0 };
 };
+
+
+// S(eventopen, NeedsBigProcessLock::No)
+struct SC_eventopen_params {
+    StringArgument false_path;
+    int32_t bool_create; // true=create
+};
+
+// S(eventclose, NeedsBigProcessLock::No)
+struct SC_eventclose_params {
+    int32_t descriptor;
+};
+
+// S(eventwait, NeedsBigProcessLock::No)
+struct SC_eventwait_params {
+    int32_t descriptor;
+};
+
+// S(eventsignal, NeedsBigProcessLock::No)
+struct SC_eventsignal_params {
+    int32_t descriptor;
+};
+
+
 
 struct SC_mmap_params {
     void* addr;
