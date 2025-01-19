@@ -34,5 +34,6 @@ int main(int argc,char**){
     else
         res2=syscall(SC_eventsignal,&arg2);
     std::cout<<res2<<'\n';
+    syscall(SC_eventclose,&arg2);
     return 0;
 }

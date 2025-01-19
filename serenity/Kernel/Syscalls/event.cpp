@@ -19,35 +19,7 @@ static size_t l_event_generator=0;
 
 static Singleton<SpinlockProtected<HashMap<NonnullOwnPtr<Kernel::KString>, size_t>, LockRank::None>> s_global_event_id;
 static Singleton<SpinlockProtected<HashMap<size_t, AK::Vector<AK::LockWeakPtr<Process>>>, LockRank::None>> s_global_pids;
-
-#define EV_STR_LENTH 128
-#define EV_STR_CNT 128 
-
-// static bool ev_free_space[EV_STR_CNT];
-// static char ev_strings [EV_STR_CNT][EV_STR_LENTH]={0};
-
-
-// AK::StringView ev_str_alloc(const AK::StringView&);
-// AK::StringView ev_str_alloc(const AK::StringView& str){
-//     for(int i=0;i<EV_STR_CNT;i++){
-//         if(ev_free_space[i])
-//             continue;
-//         memcpy(&ev_strings[i],str.characters_without_null_termination(),str.length());
-//         return AK::StringView((const char*)&ev_strings[i],str.length());
-//     }
-//     return AK::StringView((const char*)nullptr,0);
-// };
-// void ev_free_str(const AK::StringView&);
-// void ev_free_str(const AK::StringView& str)
-// {
-//     size_t cnt=(((size_t)str.characters_without_null_termination())-((size_t)ev_strings[0]))/EV_STR_LENTH;
-//     ev_free_space[cnt]=false;
-// }
-
-void use_int_simple(int);
-void use_int_simple(int){};
-void use_path(AK::StringView&);
-void use_path(AK::StringView&){}
+static Singleton<SpinlockProtected<HashMap<size_t, size_t>, LockRank::None>> s_global_event_cnt;
 
 static size_t get_next_av_index(const HashMap<size_t,size_t> &map)
 {
@@ -72,6 +44,11 @@ ErrorOr<FlatPtr> Process::sys$eventopen(Userspace<Syscall::SC_eventopen_params c
             if(!params.bool_create)
                 return -1;
             size_t current_=l_event_generator++;
+            TRY(s_global_event_cnt->with([&](auto &map)->ErrorOr<void>{
+                auto result=TRY(map.try_set(current_,1));
+                VERIFY(result == AK::HashSetResult::InsertedNewEntry);
+                return Empty{};
+            }));
             auto result=TRY(s.try_set(move(input),move(current_)));
             VERIFY(result == AK::HashSetResult::InsertedNewEntry);
             return local2globalevent_translator.with([&](auto &map)->ErrorOr<FlatPtr>{
@@ -80,7 +57,11 @@ ErrorOr<FlatPtr> Process::sys$eventopen(Userspace<Syscall::SC_eventopen_params c
                 VERIFY(result == AK::HashSetResult::InsertedNewEntry);
                 return next;
             });
-        };
+        }
+        s_global_event_cnt->with([&](auto &map){
+                auto its=map.find(it->value);
+                its->value++;
+        });
         return local2globalevent_translator.with([&](auto &map)->ErrorOr<FlatPtr>{
             auto its=map.find(it->value);
             if(its==map.end()){
@@ -100,8 +81,26 @@ ErrorOr<FlatPtr> Process::sys$eventclose(Userspace<Syscall::SC_eventclose_params
     VERIFY_NO_PROCESS_BIG_LOCK(this);
     // TRY(require_promise(Pledge::stdio));
     auto params = TRY(copy_typed_from_user(user_params));
-    use_int_simple(params.descriptor);
-    return NULL;
+    return local2globalevent_translator.with([&](auto &translator)->ErrorOr<FlatPtr>{
+        auto it=translator.find(params.descriptor);
+        if(it==translator.end())
+            return -1;
+        return s_global_event_cnt->with([&](auto &cnts)->ErrorOr<FlatPtr>{
+            auto its=cnts.find(it->value);
+            if(its==cnts.end())
+                return EINVAL;
+            if(--its->value)
+                return 0;
+            cnts.remove(its);
+            s_global_pids->with([&](auto &self){self.remove(it->value);});
+            s_global_event_id->with([&](auto &strs){
+                strs.remove_all_matching([&](auto &,auto&value){return value==it->value;});
+            });
+            translator.remove(it);
+            dbgln("deleted");
+            return 0;
+        });
+    });
 }
 ErrorOr<FlatPtr> Process::sys$eventwait(Userspace<Syscall::SC_eventwait_params const*> user_params)
 {
