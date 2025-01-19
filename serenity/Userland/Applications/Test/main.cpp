@@ -21,8 +21,14 @@ struct args{
 int main(){
     
     std::cout<<"hello world\n";
-    args arg={{"test",4},0};  
+    args arg={{"test",4},1};  
     int res=syscall(SC_eventopen,&arg);
     std::cout<<res<<'\n';
+    std::cout<<"waiting\n";
+    struct args2{
+        int res;
+    } arg2={res};
+    int res2=syscall(SC_eventwait,&arg2);
+    std::cout<<res2<<'\n';
     return 0;
 }
