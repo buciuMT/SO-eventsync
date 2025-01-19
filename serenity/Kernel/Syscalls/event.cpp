@@ -7,18 +7,18 @@
 // Implement the event syscalls
 #include <AK/Singleton.h>
 #include <AK/String.h>
+#include <AK/WeakPtr.h>
 #include <Kernel/Debug.h>
 #include <Kernel/Memory/InodeVMObject.h>
 #include <Kernel/Memory/MemoryManager.h>
 #include <Kernel/Tasks/Process.h>
-
 
 namespace Kernel {
 
 static size_t l_event_generator=0;
 
 static Singleton<SpinlockProtected<HashMap<NonnullOwnPtr<Kernel::KString>, size_t>, LockRank::None>> s_global_event_id;
-static Singleton<SpinlockProtected<HashMap<size_t, Vector<int>>, LockRank::None>> s_global_pids;
+static Singleton<SpinlockProtected<HashMap<size_t, AK::Vector<AK::LockWeakPtr<Process>>>, LockRank::None>> s_global_pids;
 
 #define EV_STR_LENTH 128
 #define EV_STR_CNT 128 
@@ -71,12 +71,12 @@ ErrorOr<FlatPtr> Process::sys$eventopen(Userspace<Syscall::SC_eventopen_params c
         {
             if(!params.bool_create)
                 return -1;
-            size_t current=l_event_generator++;
-            auto result=TRY(s.try_set(move(input),move(current)));
+            size_t current_=l_event_generator++;
+            auto result=TRY(s.try_set(move(input),move(current_)));
             VERIFY(result == AK::HashSetResult::InsertedNewEntry);
             return local2globalevent_translator.with([&](auto &map)->ErrorOr<FlatPtr>{
                 size_t next=get_next_av_index(map);
-                auto result=TRY(map.try_set(next,current));
+                auto result=TRY(map.try_set(next,current_));
                 VERIFY(result == AK::HashSetResult::InsertedNewEntry);
                 return next;
             });
@@ -106,9 +106,31 @@ ErrorOr<FlatPtr> Process::sys$eventclose(Userspace<Syscall::SC_eventclose_params
 ErrorOr<FlatPtr> Process::sys$eventwait(Userspace<Syscall::SC_eventwait_params const*> user_params)
 {
     VERIFY_PROCESS_BIG_LOCK_ACQUIRED(this);
-    // TRY(require_promise(Pledge::stdio));
     auto params = TRY(copy_typed_from_user(user_params));
-    use_int_simple(params.descriptor);
+    dbgln("here");
+    int desc=params.descriptor;
+    if(desc<0)
+        return -EINVAL;
+    return local2globalevent_translator.with([&](auto &map)->ErrorOr<FlatPtr>{
+        auto it=map.find(desc);
+        if(it==map.end())
+            return -EINVAL;
+        return s_global_pids->with([&](AK::HashMap<size_t, AK::Vector<AK::LockWeakPtr<Process>>> &procs)->ErrorOr<FlatPtr>{
+            auto its=procs.find(it->value);
+            if(its==procs.end())
+            {
+                auto result=TRY(procs.try_set(it->value,AK::Vector<AK::LockWeakPtr<Process>>()));
+                VERIFY(result == AK::HashSetResult::InsertedNewEntry);
+            }
+            its=procs.find(it->value);
+            if(its==procs.end())
+                return -1; //wtf
+            auto tmp=TRY(this->template try_make_weak_ptr<Process>());
+            TRY(its->value.try_append(move(tmp)));
+            TRY(do_killself(SIGSTOP));
+            return NULL;
+        });
+    });
     return NULL;
 }
 ErrorOr<FlatPtr> Process::sys$eventsignal(Userspace<Syscall::SC_eventsignal_params const*> user_params)

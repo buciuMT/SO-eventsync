@@ -205,7 +205,7 @@ enum class NeedsBigProcessLock {
     S(yield, NeedsBigProcessLock::No)                      \
     S(eventopen, NeedsBigProcessLock::No)                  \
     S(eventclose, NeedsBigProcessLock::No)                 \
-    S(eventwait, NeedsBigProcessLock::No)                  \
+    S(eventwait, NeedsBigProcessLock::Yes)                  \
     S(eventsignal, NeedsBigProcessLock::No)                \
 
 namespace Syscall {
