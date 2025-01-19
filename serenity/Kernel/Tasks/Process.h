@@ -1000,6 +1000,8 @@ public:
     using AllProcessesList = IntrusiveListRelaxedConst<&Process::m_all_processes_list_node>;
 
 private:
+    SpinlockProtected<HashMap<size_t,size_t>, LockRank::None> local2globalevent_translator; //my translator
+
     SpinlockProtected<RefPtr<ScopedProcessList>, LockRank::None> m_scoped_process_list;
 
     SpinlockProtected<RefPtr<VFSRootContext>, LockRank::Process> m_attached_vfs_root_context;
