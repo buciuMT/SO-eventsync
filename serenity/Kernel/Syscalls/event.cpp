@@ -135,12 +135,30 @@ ErrorOr<FlatPtr> Process::sys$eventwait(Userspace<Syscall::SC_eventwait_params c
 }
 ErrorOr<FlatPtr> Process::sys$eventsignal(Userspace<Syscall::SC_eventsignal_params const*> user_params)
 {
-    
     VERIFY_NO_PROCESS_BIG_LOCK(this);
     // TRY(require_promise(Pledge::stdio));
     auto params = TRY(copy_typed_from_user(user_params));
-    use_int_simple(params.descriptor);
-    return NULL;
+    int desc=params.descriptor;
+    return local2globalevent_translator.with([&](auto &map)->ErrorOr<FlatPtr>{
+        auto it=map.find(desc);
+        if(it==map.end())
+            return -1;
+        return s_global_pids->with([&](auto &pids)->ErrorOr<FlatPtr>{
+            auto its=pids.find(it->value);
+            if(its==pids.end())
+                return -1;
+            int cnt=0;
+            for(auto &ii:its->value){
+                auto c=ii.strong_ref();
+                if(c){
+                    TRY(do_kill(*c,SIGCONT));
+                    cnt++;
+                }
+            }
+            its->value.clear();
+            return cnt;
+        });
+    });
 }
 
 }

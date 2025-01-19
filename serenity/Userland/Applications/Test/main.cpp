@@ -18,7 +18,7 @@ struct args{
     int bol;
 };
 
-int main(){
+int main(int argc,char**){
     
     std::cout<<"hello world\n";
     args arg={{"test",4},1};  
@@ -28,7 +28,11 @@ int main(){
     struct args2{
         int res;
     } arg2={res};
-    int res2=syscall(SC_eventwait,&arg2);
+    int res2;
+    if(argc<2)
+        res2=syscall(SC_eventwait,&arg2);
+    else
+        res2=syscall(SC_eventsignal,&arg2);
     std::cout<<res2<<'\n';
     return 0;
 }
